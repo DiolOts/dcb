@@ -47,6 +47,8 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/handlers/JoinRequestHandler.php';
 require_once __DIR__ . '/handlers/AdminChannelHandler.php';
 require_once __DIR__ . '/handlers/CallbackHandler.php';
+require_once __DIR__ . '/handlers/ForumHandler.php';
+require_once __DIR__ . '/handlers/CallbackHandler.php';
 
 // Подключаем клавиатуры
 require_once __DIR__ . '/keyboards/InlineKeyboards.php';
@@ -234,7 +236,7 @@ try {
     
     // Всегда отвечаем 200 OK для Telegram, даже если возникли ошибки
     http_response_code(200);
-    header('Content-Type: application/json');
+    @header('Content-Type: application/json');
     
     $response = [
         'ok' => true,

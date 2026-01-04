@@ -14,7 +14,7 @@ class AdminChannelHandler {
             $userInfo = self::getUserInfo($userId);
             
             // Формируем сообщение для форума
-            $forumMessage = self::formatForumMessage($userInfo, $requestId, $userMessage);
+            $forumMessage = self::formatForumMessage($userId, $userInfo, $requestId, $userMessage);
             
             // Отправляем в топик форума
             $messageId = ForumHandler::sendToForumTopic(
@@ -49,7 +49,7 @@ class AdminChannelHandler {
     /**
      * Форматирование сообщения для топика форума
      */
-    private static function formatForumMessage($userInfo, $requestId, $userMessage = null) {
+    private static function formatForumMessage($userId, $userInfo, $requestId, $userMessage = null) {
         $statusEmoji = "📨";
         $userLink = $userInfo['username'] ? 
                    "<a href='https://t.me/{$userInfo['username']}'>@{$userInfo['username']}</a>" : 

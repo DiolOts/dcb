@@ -65,9 +65,13 @@ class CallbackHandler {
             $messageId = $message['message_id'];
             $from = $callbackQuery['from'];
             $adminId = $from['id'];
+            $adminName = $from['first_name'];
+            
+
+
             
             // Логируем callback
-            error_log("Callback received: {$data} from admin {$adminId}");
+            error_log("Callback received: {$data} from admin {$adminName}");
             
             // Разбираем callback_data
             $parts = explode('_', $data);

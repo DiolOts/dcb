@@ -85,6 +85,9 @@ class JoinRequestHandler {
             
             $requestId = $this->db->selectOne("SELECT LAST_INSERT_ID() as id");
             $requestId = $requestId['id'];
+
+
+
             
             error_log("Created join request #{$requestId} for user {$userId}");
             
@@ -98,6 +101,7 @@ class JoinRequestHandler {
                     $requestId
                 );
                 
+                /*
                 // Уведомляем админ-форум о НОВОЙ заявке (еще без ответа)
                 AdminChannelHandler::notifyNewPendingRequest(
                     $requestId,
@@ -105,6 +109,7 @@ class JoinRequestHandler {
                     $username,
                     $firstName
                 );
+                */
                 
                 error_log("Join request #{$requestId} processed for user {$userId}");
                 return true;
@@ -710,6 +715,8 @@ class JoinRequestHandler {
                 // Отклоняем заявку в канале
                 $this->declineJoinRequest($request['user_id']);
                 
+
+                /*
                 // Уведомляем админ-форум
                 AdminChannelHandler::notifyExpiredRequestInForum(
                     $request['id'],
@@ -717,6 +724,7 @@ class JoinRequestHandler {
                     $request['username'],
                     $request['first_name']
                 );
+                */
                 
                 error_log("Request #{$request['id']} expired for user {$request['user_id']}");
             }

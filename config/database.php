@@ -34,6 +34,7 @@ function initDatabase($db) {
         processed_at TIMESTAMP NULL,
         request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         welcome_sent BOOLEAN DEFAULT FALSE,
+		welcome_sent_at TIMESTAMP NULL,
         expires_at TIMESTAMP NULL,
         answer_text TEXT DEFAULT NULL,
         answer_photo_id VARCHAR(255) DEFAULT NULL,
@@ -67,3 +68,4 @@ function initDatabase($db) {
 
 global $db;
 ?>
+
