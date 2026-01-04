@@ -1,0 +1,52 @@
+# Защита файлов и директорий
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Запретить доступ к файлам логов
+    RewriteRule ^logs/ - [F,L]
+    
+    # Запретить доступ к конфигурационным файлам
+    RewriteRule ^config/ - [F,L]
+    
+    # Запретить доступ к скриптам с расширениями
+    RewriteRule \.(log|ini|conf|sql|bak|tmp)$ - [F,L]
+    
+    # Разрешить доступ только к bot_core.php извне
+    RewriteCond %{REQUEST_URI} !^/bot_core\.php$
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule \.(php)$ - [F,L]
+</IfModule>
+
+# Запретить просмотр директорий
+Options -Indexes
+
+# Защита от XSS
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options nosniff
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# Правила для PHP
+<IfModule mod_php.c>
+    # Лимит на выполнение скрипта (30 секунд)
+    php_value max_execution_time 30
+    
+    # Лимит памяти
+    php_value memory_limit 128M
+    
+    # Размер загружаемых файлов (для фото)
+    php_value upload_max_filesize 10M
+    php_value post_max_size 12M
+    
+    # Включить логирование ошибок
+    php_flag log_errors on
+    php_value error_log "logs/php_errors.log"
+    
+    # Отключить вывод ошибок на продакшене
+    php_flag display_errors off
+    php_flag display_startup_errors off
+</IfModule>
+
+# Типы MIME
+AddType application/x-httpd-php .php
+AddType text/plain .log
