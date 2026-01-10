@@ -85,9 +85,6 @@ class JoinRequestHandler {
             
             $requestId = $this->db->selectOne("SELECT LAST_INSERT_ID() as id");
             $requestId = $requestId['id'];
-
-
-
             
             error_log("Created join request #{$requestId} for user {$userId}");
             

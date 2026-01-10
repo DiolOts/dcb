@@ -40,6 +40,7 @@ function initDatabase($db) {
         answer_photo_id VARCHAR(255) DEFAULT NULL,
         answer_date TIMESTAMP NULL,
         admin_message_id INT DEFAULT NULL,
+        confirmation_message_id INT DEFAULT NULL,
         INDEX idx_user_status (user_id, status),
         INDEX idx_expires (expires_at),
         INDEX idx_request_date (request_date)

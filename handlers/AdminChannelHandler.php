@@ -1,47 +1,57 @@
 <?php
 require_once __DIR__ . '/../config/config.php';
-require_once __DIR__ . '/../keyboards/InlineKeyboards.php';
-require_once __DIR__ . '/ForumHandler.php';
 
 class AdminChannelHandler {
     
     /**
-     * Отправка новой заявки в топик форума
+     * Пересылка сообщения в топик форума
      */
     public static function sendNewRequestToForum($userId, $userMessage = null, $photoFileId = null, $requestId = null) {
         try {
             // Получаем информацию о пользователе
             $userInfo = self::getUserInfo($userId);
             
+            // ДЕБАГ: Проверяем, что вернул getUserInfo
+            error_log("sendNewRequestToForum: userInfo type = " . gettype($userInfo));
+            error_log("sendNewRequestToForum: userInfo = " . print_r($userInfo, true));
+            
             // Формируем сообщение для форума
-            $forumMessage = self::formatForumMessage($userId, $userInfo, $requestId, $userMessage);
+            $forumMessage = self::formatForumMessage($userInfo, $requestId, $userMessage);
             
             // Отправляем в топик форума
-            $messageId = ForumHandler::sendToForumTopic(
-                $forumMessage,
-                InlineKeyboards::getRequestKeyboard($requestId, $userId),
-                $photoFileId
-            );
+            $response = self::callTelegramApi('sendMessage', [
+                'chat_id' => ADMIN_CHANNEL_ID,
+                'message_thread_id' => ADMIN_TOPIC_ID,
+                'text' => $forumMessage,
+                'parse_mode' => 'HTML',
+                'disable_web_page_preview' => true,
+                'reply_markup' => json_encode([
+                    'inline_keyboard' => [
+                        [
+                            ['text' => '✅ ПРИНЯТЬ', 'callback_data' => 'approve_' . $requestId . '_' . $userId],
+                            ['text' => '❌ ОТКЛОНИТЬ', 'callback_data' => 'reject_' . $requestId . '_' . $userId]
+                        ]
+                    ]
+                ])
+            ]);
             
-            // Если есть текстовый ответ пользователя, отправляем его отдельным сообщением
-            if ($userMessage && !empty(trim($userMessage)) && 
-                !in_array(trim($userMessage), ['/start', '/начать'])) {
-                
-                $replyText = "📝 <b>Текст ответа пользователя:</b>\n" .
-                            "<code>" . htmlspecialchars($userMessage) . "</code>";
-                
-                ForumHandler::sendToForumTopic(
-                    $replyText,
-                    null,
-                    null,
-                    $messageId // Ответ на основное сообщение
-                );
+            $messageId = $response['result']['message_id'] ?? null;
+            
+            // Если есть фото, отправляем его отдельным сообщением
+            if ($photoFileId) {
+                self::callTelegramApi('sendPhoto', [
+                    'chat_id' => ADMIN_CHANNEL_ID,
+                    'message_thread_id' => ADMIN_TOPIC_ID,
+                    'photo' => $photoFileId,
+                    'caption' => "📸 Фото от пользователя",
+                    'reply_to_message_id' => $messageId
+                ]);
             }
             
             return $messageId;
             
         } catch (Exception $e) {
-            error_log("Error sending to forum: " . $e->getMessage());
+            error_log("Error in sendNewRequestToForum: " . $e->getMessage());
             return false;
         }
     }
@@ -49,16 +59,34 @@ class AdminChannelHandler {
     /**
      * Форматирование сообщения для топика форума
      */
-    private static function formatForumMessage($userId, $userInfo, $requestId, $userMessage = null) {
+    private static function formatForumMessage($userInfo, $requestId, $userMessage = null) {
+        // ИСПРАВЛЕНО: Проверяем, что $userInfo - массив
+        if (!is_array($userInfo)) {
+            error_log("formatForumMessage: userInfo is not an array! Type: " . gettype($userInfo));
+            // Создаем массив по умолчанию
+            $userInfo = [
+                'id' => 0,
+                'username' => null,
+                'first_name' => 'Неизвестный пользователь',
+                'last_name' => ''
+            ];
+        }
+        
+        // ИСПРАВЛЕНО: Убеждаемся, что все ключи существуют
+        $userId = $userInfo['id'] ?? 0;
+        $username = $userInfo['username'] ?? null;
+        $firstName = $userInfo['first_name'] ?? 'Неизвестно';
+        $lastName = $userInfo['last_name'] ?? '';
+        
         $statusEmoji = "📨";
-        $userLink = $userInfo['username'] ? 
-                   "<a href='https://t.me/{$userInfo['username']}'>@{$userInfo['username']}</a>" : 
+        $userLink = $username ? 
+                   "<a href='https://t.me/{$username}'>@{$username}</a>" : 
                    "без username";
         
-        $lastName = !empty($userInfo['last_name']) ? " " . $userInfo['last_name'] : "";
+        $lastNameDisplay = $lastName ? " " . $lastName : "";
         
         $message = "{$statusEmoji} <b>НОВАЯ ЗАЯВКА #{$requestId}</b>\n\n" .
-                  "👤 <b>Пользователь:</b> {$userInfo['first_name']}{$lastName}\n" .
+                  "👤 <b>Пользователь:</b> {$firstName}{$lastNameDisplay}\n" .
                   "🔗 <b>Username:</b> {$userLink}\n" .
                   "🆔 <b>User ID:</b> <code>{$userId}</code>\n" .
                   "📅 <b>Время заявки:</b> " . date('d.m.Y H:i:s') . "\n\n" .
@@ -80,39 +108,35 @@ class AdminChannelHandler {
     }
     
     /**
-     * Получение информации о пользователе
+     * Получение информации о пользователе (публичный для тестирования)
      */
-    private static function getUserInfo($userId) {
+    public static function getUserInfo($userId) {
         try {
-            $url = "https://api.telegram.org/bot" . BOT_TOKEN . "/getChat";
+            error_log("Getting user info for user ID: {$userId}");
             
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_URL => $url,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => ['chat_id' => $userId],
-                CURLOPT_TIMEOUT => 5
+            $response = self::callTelegramApi('getChat', [
+                'chat_id' => $userId
             ]);
             
-            $response = curl_exec($ch);
-            curl_close($ch);
-            
-            $result = json_decode($response, true);
-            
-            if ($result['ok']) {
-                return [
+            if ($response['ok']) {
+                $result = [
                     'id' => $userId,
-                    'username' => $result['result']['username'] ?? null,
-                    'first_name' => $result['result']['first_name'] ?? 'Не указано',
-                    'last_name' => $result['result']['last_name'] ?? ''
+                    'username' => $response['result']['username'] ?? null,
+                    'first_name' => $response['result']['first_name'] ?? 'Не указано',
+                    'last_name' => $response['result']['last_name'] ?? ''
                 ];
+                error_log("User info retrieved successfully: " . print_r($result, true));
+                return $result;
+            } else {
+                error_log("getUserInfo API error for user {$userId}: " . ($response['description'] ?? 'Unknown error'));
             }
             
         } catch (Exception $e) {
-            error_log("Error getting user info: " . $e->getMessage());
+            error_log("Error in getUserInfo for user {$userId}: " . $e->getMessage());
         }
         
+        // Возвращаем массив по умолчанию в случае ошибки
+        error_log("Returning default user info for user {$userId}");
         return [
             'id' => $userId,
             'username' => null,
@@ -122,33 +146,59 @@ class AdminChannelHandler {
     }
     
     /**
-     * Уведомление о просроченной заявке в топик форума
+     * Универсальный метод для вызова API Telegram
      */
-    public static function notifyExpiredRequestInForum($requestId, $userId, $username, $firstName) {
-        try {
-            $usernameDisplay = $username ? "@{$username}" : "без username";
-            $lastAction = date('H:i', time() + RESPONSE_TIMEOUT);
-            
-            $message = "❌ <b>ЗАЯВКА ПРОСРОЧЕНА #{$requestId}</b>\n\n" .
-                      "👤 <b>Пользователь:</b> {$firstName}\n" .
-                      "🔗 <b>Username:</b> {$usernameDisplay}\n" .
-                      "🆔 <b>User ID:</b> <code>{$userId}</code>\n\n" .
-                      "📋 <b>Статус:</b> Автоматически отклонена\n" .
-                      "⏰ <b>Причина:</b> Не ответил в течение 8 часов\n" .
-                      "🕐 <b>Последнее действие:</b> {$lastAction}\n" .
-                      "📅 <b>Время:</b> " . date('d.m.Y H:i:s') . "\n\n" .
-                      "────────────────────\n" .
-                      "<i>Тема заявок: <a href='" . ADMIN_CHANNEL_LINK . "'>#" . ADMIN_TOPIC_ID . "</a></i>";
-            
-            ForumHandler::sendToForumTopic($message);
-            
-        } catch (Exception $e) {
-            error_log("Error notifying expired request: " . $e->getMessage());
+    private static function callTelegramApi($method, $params = []) {
+        $url = "https://api.telegram.org/bot" . BOT_TOKEN . "/" . $method;
+        
+        // Логируем запрос (без чувствительных данных)
+        $logParams = $params;
+        if (isset($logParams['chat_id'])) {
+            $logParams['chat_id'] = is_string($logParams['chat_id']) ? 
+                substr($logParams['chat_id'], 0, 10) . '...' : $logParams['chat_id'];
         }
+        error_log("AdminChannelHandler API Call: {$method}");
+        
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $params,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_CONNECTTIMEOUT => 10
+        ]);
+        
+        $response = curl_exec($ch);
+        
+        if (curl_errno($ch)) {
+            $error = curl_error($ch);
+            error_log("AdminChannelHandler CURL Error for {$method}: {$error}");
+            curl_close($ch);
+            throw new Exception('CURL Error: ' . $error);
+        }
+        
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        $decoded = json_decode($response, true) ?: [];
+        
+        if ($httpCode != 200) {
+            error_log("AdminChannelHandler HTTP Error {$httpCode} for method {$method}");
+            throw new Exception("HTTP Error {$httpCode}");
+        }
+        
+        if (!$decoded['ok']) {
+            error_log("AdminChannelHandler Telegram API Error for {$method}: " . 
+                     ($decoded['description'] ?? 'Unknown error'));
+            // Не бросаем исключение, просто возвращаем результат с ошибкой
+        }
+        
+        return $decoded;
     }
     
     /**
-     * Уведомление о новой заявке (до получения ответа)
+     * Уведомление о новой заявке
      */
     public static function notifyNewPendingRequest($requestId, $userId, $username, $firstName) {
         try {
@@ -166,38 +216,15 @@ class AdminChannelHandler {
                       "────────────────────\n" .
                       "<i>Тема заявок: <a href='" . ADMIN_CHANNEL_LINK . "'>#" . ADMIN_TOPIC_ID . "</a></i>";
             
-            ForumHandler::sendToForumTopic($message);
+            self::callTelegramApi('sendMessage', [
+                'chat_id' => ADMIN_CHANNEL_ID,
+                'message_thread_id' => ADMIN_TOPIC_ID,
+                'text' => $message,
+                'parse_mode' => 'HTML'
+            ]);
             
         } catch (Exception $e) {
             error_log("Error notifying new request: " . $e->getMessage());
-        }
-    }
-    
-    /**
-     * Отправка системного уведомления в топик форума
-     */
-    public static function sendSystemNotification($title, $message, $type = 'info') {
-        try {
-            $icons = [
-                'info' => 'ℹ️',
-                'success' => '✅',
-                'warning' => '⚠️',
-                'error' => '❌',
-                'debug' => '🐛'
-            ];
-            
-            $icon = $icons[$type] ?? $icons['info'];
-            
-            $formattedMessage = "{$icon} <b>{$title}</b>\n\n" .
-                               "{$message}\n\n" .
-                               "📅 <i>" . date('d.m.Y H:i:s') . "</i>\n" .
-                               "────────────────────\n" .
-                               "<i>Тема заявок: <a href='" . ADMIN_CHANNEL_LINK . "'>#" . ADMIN_TOPIC_ID . "</a></i>";
-            
-            ForumHandler::sendToForumTopic($formattedMessage);
-            
-        } catch (Exception $e) {
-            error_log("Error sending system notification: " . $e->getMessage());
         }
     }
 }
